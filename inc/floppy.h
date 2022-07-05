@@ -40,6 +40,7 @@ struct adf_image {
     uint32_t pre_idx_gap_bc;
     uint32_t nr_secs;
     uint32_t written_secs;
+    struct { uint8_t off, sz; } wr_batch;
     uint8_t sec_map[2][22];
 };
 

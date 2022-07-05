@@ -107,6 +107,7 @@ static void adf_setup_track(
     } else {
         im->adf.sec_idx = 0;
         im->adf.written_secs = 0;
+        im->adf.wr_batch.sz = 0;
     }
 }
 
@@ -241,7 +242,7 @@ static bool_t adf_write_track(struct image *im)
     uint32_t *w, *wrbuf = im->bufs.write_data.p;
     uint32_t c = wr->cons / 32, p = wr->prod / 32;
     uint32_t info, dsum, csum;
-    unsigned int i, sect, batch_sect, batch, max_batch;
+    unsigned int i, sect, batch_off, batch_sz, max_batch_sz;
     unsigned int hd = im->cur_track & 1;
 
     /* If we are processing final data then use the end index, rounded up. */
@@ -250,11 +251,11 @@ static bool_t adf_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 31) / 32;
 
-    batch = batch_sect = 0;
-    max_batch = min_t(unsigned int,
-                      im->bufs.write_data.len / 512,
-                      MAX_WR_BATCH);
-    w = wrbuf;
+    batch_sz = im->adf.wr_batch.sz;
+    batch_off = im->adf.wr_batch.off;
+    max_batch_sz = min_t(unsigned int,
+                         im->bufs.write_data.len / 512,
+                         MAX_WR_BATCH);
 
     while ((int16_t)(p - c) >= (542/2)) {
 
@@ -286,11 +287,11 @@ static bool_t adf_write_track(struct image *im)
             continue;
         }
 
-        if (batch && ((sect != batch_sect + batch) || (batch >= max_batch))) {
-            ASSERT(batch <= max_batch);
-            write_batch(im, batch_sect, batch);
-            batch = 0;
-            w = wrbuf;
+        if (batch_sz && ((sect != batch_off + batch_sz)
+                         || (batch_sz >= max_batch_sz))) {
+            ASSERT(batch_sz <= max_batch_sz);
+            write_batch(im, batch_off, batch_sz);
+            batch_sz = 0;
         }
 
         /* Data checksum. */
@@ -299,6 +300,7 @@ static bool_t adf_write_track(struct image *im)
 
         /* Data area. Decode to a write buffer and keep a running checksum. */
         dsum = 0;
+        w = wrbuf + batch_sz * 128;
         for (i = dsum = 0; i < 128; i++) {
             uint32_t o = buf[(c + 128) & bufmask] & 0x55555555;
             uint32_t e = buf[c++ & bufmask] & 0x55555555;
@@ -319,11 +321,14 @@ static bool_t adf_write_track(struct image *im)
             im->adf.written_secs |= 1u<<sect;
             im->adf.sec_map[hd][im->adf.sec_idx++] = sect;
         }
-        if (batch++ == 0)
-            batch_sect = sect;
+        if (batch_sz++ == 0)
+            batch_off = sect;
     }
 
-    write_batch(im, batch_sect, batch);
+    if (flush || (batch_sz >= max_batch_sz)) {
+        write_batch(im, batch_off, batch_sz);
+        batch_sz = 0;
+    }
 
     if (flush && (im->adf.sec_idx != im->adf.nr_secs)) {
         /* End of write: If not all sectors were correctly written,
@@ -331,6 +336,9 @@ static bool_t adf_write_track(struct image *im)
         for (sect = 0; sect < im->adf.nr_secs; sect++)
             im->adf.sec_map[hd][sect] = sect;
     }
+
+    im->adf.wr_batch.sz = batch_sz;
+    im->adf.wr_batch.off = batch_off;
 
     wr->cons = c * 32;
 
