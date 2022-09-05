@@ -394,9 +394,16 @@ static void IRQ_WGATE_rotary(void)
 static void IRQ_MOTOR(struct drive *drv)
 {
     GPIO gpio = gotek_enhanced() ? gpioa : gpiob;
+    bool_t mtr_asserted = !(gpio->idr & m(pin_motor));
 
     timer_cancel(&drv->motor.timer);
     drv->motor.on = FALSE;
+
+    if ((ff_cfg.interface == FINTF_AMIGA)
+        && (ff_cfg.motor_delay != MOTOR_ignore)) {
+        IRQ_global_disable();
+        drive_change_pin(drv, pin_34, !mtr_asserted);
+    }
 
     if (!drv->inserted) {
         /* No disk inserted -- MOTOR OFF */
@@ -405,7 +412,7 @@ static void IRQ_MOTOR(struct drive *drv)
         /* Motor signal ignored -- MOTOR ON */
         drv->motor.on = TRUE;
         drive_change_output(drv, outp_rdy, TRUE);
-    } else if (gpio->idr & m(pin_motor)) {
+    } else if (!mtr_asserted) {
         /* Motor signal off -- MOTOR OFF */
         drive_change_output(drv, outp_rdy, FALSE);
     } else {

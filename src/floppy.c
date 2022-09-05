@@ -34,6 +34,8 @@ static time_t prefetch_start_time;
 static uint32_t max_prefetch_us;
 
 struct drive;
+static always_inline void drive_change_pin(
+    struct drive *drv, uint8_t pin, bool_t assert);
 static always_inline void drive_change_output(
     struct drive *drv, uint8_t outp, bool_t assert);
 
@@ -151,7 +153,8 @@ static void update_amiga_id(struct drive *drv, bool_t amiga_hd_id)
      * the HD-ID sequence 101010... with the host poll loop. It turns out that
      * starting with pin 34 asserted when the HD image is mounted seems to
      * generally work! */
-    drive_change_pin(&drive, pin_34, TRUE);
+    if (ff_cfg.motor_delay == MOTOR_ignore)
+        drive_change_pin(&drive, pin_34, TRUE);
 }
 
 void floppy_cancel(void)
@@ -613,6 +616,10 @@ static void motor_spinup_timer(void *_drv)
     struct drive *drv = _drv;
 
     drv->motor.on = TRUE;
+    if (ff_cfg.interface == FINTF_AMIGA) {
+        IRQ_global_disable();
+        drive_change_pin(drv, pin_34, TRUE);
+    }
     drive_change_output(drv, outp_rdy, TRUE);
 }
 
