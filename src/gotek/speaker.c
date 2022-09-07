@@ -48,6 +48,7 @@ void speaker_pulse(void)
     unsigned int volume = ff_cfg.step_volume;
     time_t now;
 
+    return;
     if (!volume || (pulse.state != STATE_idle))
         return;
 

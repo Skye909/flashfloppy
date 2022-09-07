@@ -135,6 +135,7 @@ static void update_amiga_id(struct drive *drv, bool_t amiga_hd_id)
         return;
 
     drive_change_output(drv, outp_hden, amiga_hd_id);
+    gpio_write_pin(gpioa, 2, amiga_hd_id);
 
     if (pin34 != outp_unused)
         return;
@@ -166,6 +167,7 @@ void floppy_cancel(void)
      * Asserting WRPROT prevents any further calls to wdata_start(). */
     drive_change_output(drv, outp_wrprot, TRUE);
     drive_change_output(drv, outp_hden, FALSE);
+    gpio_write_pin(gpioa, 2, FALSE);
     update_amiga_id(drv, FALSE);
 
     /* Stop DMA + timer work. */
@@ -327,8 +329,10 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     floppy_mount(slot);
     im = image;
 
-    if (im->write_bc_ticks < sampleclk_ns(1500))
+    if (im->write_bc_ticks < sampleclk_ns(1500)) {
         drive_change_output(drv, outp_hden, TRUE);
+        gpio_write_pin(gpioa, 2, TRUE);
+    }
 
     timer_dma_init();
 
