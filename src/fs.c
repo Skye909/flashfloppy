@@ -99,7 +99,7 @@ void F_write(FIL *fp, const void *buff, UINT btw, UINT *bw)
     }
     if (!fp->dir_ptr) {
         /* File cannot be resized. Clip the write size. */
-        btw = min_t(UINT, btw, f_size(fp) - f_tell(fp));
+        btw = 512;
     }
     fr = f_write(fp, buff, btw, &_bw);
     if (bw != NULL) {
